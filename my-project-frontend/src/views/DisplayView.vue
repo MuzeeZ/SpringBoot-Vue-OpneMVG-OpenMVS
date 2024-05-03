@@ -56,11 +56,6 @@ onUnmounted(() => {
 });
 
 function initThreeJsScene() {
-  if (!renderBox.value) {
-    console.error("renderBox未正确初始化");
-    return;
-  }
-
   const scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(75, renderBox.value.clientWidth / renderBox.value.clientHeight, 0.1, 1000);
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -69,11 +64,11 @@ function initThreeJsScene() {
   renderBox.value.appendChild(renderer.domElement);
 
   // Improved lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);  // Soft white light
+  const ambientLight = new THREE.AmbientLight(0xffffff, 5.0);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
-  directionalLight.position.set(0, 1, 1);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight.position.set(1, 1, 1);
   scene.add(directionalLight);
 
   camera.position.set(0, 5, 15);
@@ -81,32 +76,45 @@ function initThreeJsScene() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
   controls.enableZoom = true;
-  controls.enableRotate = false;
 
   loadPLYFile(scene, camera, renderer);
 }
 
 async function loadPLYFile(scene, camera, renderer) {
   try {
-    const blob = await downloadFile('http://localhost:8080/download/test.ply');
+    const modelUrl = 'http://localhost:8080/download/scene_dense_mesh_texture.ply';
+    const textureUrl = 'http://localhost:8080/download/scene_dense_mesh_texture0.png';
+
+    const [modelBlob, textureBlob] = await Promise.all([
+      downloadFile(modelUrl),
+      downloadFile(textureUrl)
+    ]);
+
     const loader = new PLYLoader();
-    const reader = new FileReader();
-    reader.readAsArrayBuffer(blob);
-    reader.onloadend = () => {
-      const geometry = loader.parse(reader.result);
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x555555,
-        metalness: 0.5,
-        roughness: 0.5,
-        flatShading: true,
-        vertexColors: THREE.VertexColors
-      });
-      mesh = new THREE.Mesh(geometry, material);
-      scene.add(mesh);
-      animate(scene, camera, renderer);
-    };
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load(URL.createObjectURL(textureBlob));
+    texture.encoding = THREE.sRGBEncoding;  // Ensuring the texture uses sRGB color space
+
+    const geometry = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(modelBlob);
+      reader.onloadend = () => {
+        resolve(loader.parse(reader.result));
+      };
+      reader.onerror = reject;
+    });
+
+    const material = new THREE.MeshStandardMaterial({
+      map: texture,
+      metalness: 0.5,
+      roughness: 0.3
+    });
+
+    mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+    animate(scene, camera, renderer);
   } catch (error) {
-    console.error('加载PLY文件失败:', error.message);
+    console.error('加载模型或纹理文件失败:', error.message);
   }
 }
 
@@ -134,8 +142,6 @@ function handleMouseMove(event) {
 }
 </script>
 
-
-
 <style>
 #container {
   width: 100vw;
@@ -157,7 +163,3 @@ function handleMouseMove(event) {
   align-items: center;
 }
 </style>
-
-
-
-
